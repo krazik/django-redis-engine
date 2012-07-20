@@ -1,9 +1,9 @@
 from django.conf import settings
 from django.utils.importlib import import_module
-from md5 import md5
 from redis_entity import *
 _MODULE_NAMES = getattr(settings, 'REDIS_SETTINGS_MODULES', ())
 from redis.exceptions import WatchError
+import hashlib
 
 #TODO update might overwrite field indexes
 

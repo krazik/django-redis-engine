@@ -2,7 +2,7 @@
 
 from django.test import TestCase
 from models import *
-from md5 import md5
+import hashlib
 import random
 
 from django_redis_engine import redis_transaction
@@ -45,12 +45,12 @@ class SimpleTest(TestCase):
 	with redis_transaction.commit_manually(using = 'native'):
 		print "begin"
 		for i in range(n):
-			tit = md5(str(random.random())+str(i)).hexdigest()
+			tit = hashlib.md5(str(random.random())+str(i)).hexdigest()
 			l.append(tit)
 			Post.objects.create(
 					title = tit,
 					text = " ".join(
-							[md5(
+							[hashlib.md5(
 								str(random.random())+\
 								str(t)+\
 								str(i)).hexdigest() for t in range(20)]

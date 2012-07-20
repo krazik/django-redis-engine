@@ -1,5 +1,5 @@
 from django.db.models.fields import FieldDoesNotExist
-from md5 import md5
+import hashlib
 import pickle
 
 class RedisEntity(object):
@@ -63,5 +63,5 @@ def enpickle(val):
 
 def hash_for_redis(val):
 	if isinstance(val,unicode):
-		return md5(val.encode('utf-8')).hexdigest()
-	return md5(str(val)).hexdigest()
+		return hashlib.md5(val.encode('utf-8')).hexdigest()
+	return hashlib.md5(str(val)).hexdigest()
