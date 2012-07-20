@@ -3,7 +3,7 @@ from md5 import md5
 import pickle
 
 class RedisEntity(object):
-	def __init__(self,e_id,connection,db_table, pkcolumn, querymeta, db_name,empty):
+	def __init__(self,e_id,connection,db_table, pkcolumn, querymeta, db_name,empty=None):
 		self.id = e_id
 		self.connection = connection
 		self.db_table = db_table
