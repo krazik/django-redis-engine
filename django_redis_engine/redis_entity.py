@@ -49,10 +49,13 @@ def get_set_key(db_name,db_table,key,value):
 	return db_name+'_'+db_table+'_'+key+'_'+hash_for_redis(value)
 
 def unpickle(val):
-	if val is None:
-		return None
-	else:
-		return pickle.loads(val)
+    if val is None:
+        return None
+    else:
+        try:
+            return pickle.loads(val)
+        except:
+            return val
 
 def enpickle(val):
 	if val is None:

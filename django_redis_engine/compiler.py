@@ -4,6 +4,7 @@ import datetime
 
 from functools import wraps
 
+from django.db import models
 from django.db.utils import DatabaseError
 from django.db.models.fields import NOT_PROVIDED
 from django.db.models import F
@@ -16,7 +17,6 @@ from redis_entity import RedisEntity,split_db_type,hash_for_redis,get_hash_key,g
 
 from index_utils import get_indexes,create_indexes,delete_indexes,filter_with_index,isiterable
 
-import pickle
 import redis
 
 
@@ -346,7 +346,8 @@ class SQLCompiler(NonrelCompiler):
 
     def _save(self, data, return_id=False):
 
-	db_table = self.query.get_meta().db_table
+	meta = self.query.get_meta()
+	db_table = meta.db_table
 	indexes = get_indexes()
 	indexes_for_model =  indexes.get(self.query.model,{})
 
@@ -357,23 +358,24 @@ class SQLCompiler(NonrelCompiler):
 
 	if '_id' in data:
 		pk = data['_id']
-		new = False
 		h_map_old = self._collection.hgetall(get_hash_key(self.db_name,db_table,pk))
 	else:
 		pk = self._collection.incr(self.db_name+'_'+db_table+"_id")
-		new = True		
+		h_map_old = {}
 	
 	for key,value in data.iteritems():
-		
-		if new:
-			old = None
-			h_map[key] = pickle.dumps(value)			
-		else:
-			if key == "_id": continue
-			old = pickle.loads(h_map_old[key])
+                if key == "_id":
+                  continue
+                if key in h_map_old:
+                    old = unpickle(h_map_old[key])
+                else:
+                    old = None
 
-			if old != value:
-				h_map[key] = pickle.dumps(value)
+                if old != value:
+                    if not isinstance(meta.get_field(key), models.IntegerField):
+                        # pickle non integers
+                        value = enpickle(value)
+                    h_map[key] = value
 
 		if key in indexes_for_model or self.connection.exact_all:
 			try:
@@ -393,9 +395,9 @@ class SQLCompiler(NonrelCompiler):
 					self.db_name,
 					)
 	
-        if '_id' not in data: pipeline.sadd(self.db_name+'_'+db_table+"_ids" ,pk)
-	
-	pipeline.hmset(get_hash_key(self.db_name,db_table,pk),h_map)			
+        pipeline.sadd(self.db_name+'_'+db_table+"_ids" ,pk)
+        if len(h_map):
+            pipeline.hmset(get_hash_key(self.db_name,db_table,pk),h_map)			
 	pipeline.execute()
         if return_id:
             return unicode(pk)
