@@ -1,3 +1,4 @@
+from django.db import models
 from django.db.models.fields import FieldDoesNotExist
 import hashlib
 import pickle
@@ -16,16 +17,33 @@ class RedisEntity(object):
 		
 		
 	def get(self,what,value):
-		
-		if self.empty: return ''
-		if what in self.data:
-			#print self.data,self.data[what]
-			return unpickle(self.data[what])
-		if what == self.pkcolumn:
-			return self.id
-		else:
-			return unpickle(self.connection.hget(get_hash_key(self.db_name,self.db_table,self.id), what))				
+            if self.empty:
+                return ''
+            if what == self.pkcolumn:
+                return self.id
+            raw_value = ''
+            if what in self.data:
+                raw_value = self.data[what]
+            else:
+                raw_value = self.connection.hget(get_hash_key(self.db_name,self.db_table,self.id), what)
+            
+            rv = None
+            try:
+                if isinstance(self.querymeta.get_field(what), models.IntegerField):
+                    # don't pickle integers
+                    rv = int(raw_value)
+                elif isinstance(self.querymeta.get_field(what), models.FloatField):
+                    rv = float(raw_value)
+                elif isinstance(self.querymeta.get_field(what), models.DecimalField):
+                    rv = Decimal(raw_value)
+            except:
+                pass
 
+            if not rv:
+                # didn't get set, unpickle it
+                rv = unpickle(value)
+
+            return rv
 
 def split_db_type(db_type):
 	#TODO move somewhere else
