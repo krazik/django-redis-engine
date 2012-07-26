@@ -1,6 +1,14 @@
 ==========================================
- Django Redis Engine for django-nonrel 0.1
+ Django Redis Engine for django-nonrel 0.1.*
 ==========================================
+
+What?
+=====
+Forked from https://github.com/MirkoRossini/django-redis-engine since there were some minor bugs initially. 
+* What was changed
+  * No longer Pickle's ints/floats so that you can use atomic redis functions on the fields (HINCRBY, etc)
+  * Removed deprecated calls to md5
+  * Bug fixes
 
 Requirements
 ============
