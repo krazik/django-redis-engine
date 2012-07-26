@@ -372,10 +372,20 @@ class SQLCompiler(NonrelCompiler):
                     old = None
 
                 if old != value:
-                    if not isinstance(meta.get_field(key), models.IntegerField):
-                        # pickle non integers
-                        value = enpickle(value)
-                    h_map[key] = value
+                    new_value = None
+                    if value:
+                        try:
+                            if isinstance(meta.get_field(key), models.IntegerField):
+                                # don't pickle integers
+                                new_value = value
+                        except:
+                            pass
+
+                        if not new_value:
+                            # didn't get set, pickle it
+                            new_value = enpickle(value)
+
+                    h_map[key] = new_value
 
 		if key in indexes_for_model or self.connection.exact_all:
 			try:
