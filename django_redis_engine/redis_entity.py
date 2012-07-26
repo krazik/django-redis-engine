@@ -41,7 +41,7 @@ class RedisEntity(object):
 
             if not rv:
                 # didn't get set, unpickle it
-                rv = unpickle(value)
+                rv = unpickle(raw_value)
 
             return rv
 
