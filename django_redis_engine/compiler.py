@@ -14,6 +14,7 @@ from django.db.models.sql.constants import MULTI, SINGLE
 from django.db.models.sql.where import AND, OR
 from django.utils.tree import Node
 from redis_entity import RedisEntity,split_db_type,hash_for_redis,get_hash_key,get_set_key,get_list_key,enpickle,unpickle
+from redis_models import *
 
 from index_utils import get_indexes,create_indexes,delete_indexes,filter_with_index,isiterable
 
@@ -361,56 +362,55 @@ class SQLCompiler(NonrelCompiler):
         else:
             pk = self._collection.incr(self.db_name+'_'+db_table+"_id")
             h_map_old = {}
+            
+        for key,value in data.iteritems():
+            if key == "_id":
+              continue
+            if key in h_map_old:
+                old = unpickle(h_map_old[key])
+            else:
+                old = None
 
-            for key,value in data.iteritems():
-                if key == "_id":
-                  continue
-                if key in h_map_old:
-                    old = unpickle(h_map_old[key])
-                else:
-                    old = None
-
-
-
-                # if item is a RedisAtomicInteger we don't want to save it, since it's being atomically updated
-                # in other code.  but it hasn't been set before we do want to save it the first time. also we don't
-                # want to pickle these so that HINCRYBY can work
-                do_pickle = True
-                do_set = value and old != value
-                if do_set:
-                    try:
-                        if isinstance(meta.get_field(key), RedisAtomicInteger):
-                            do_pickle = False
-                            do_set = old is not None
-                    except:
-                        pass
-
-                if do_set:
-                    if do_pickle:
-                        value = enpickle(value)
-                    h_map[key] = value
+            # if item is a RedisAtomicInteger we don't want to save it, since it's being atomically updated
+            # in other code.  but it hasn't been set before we do want to save it the first time. also we don't
+            # want to pickle these so that HINCRYBY can work
+            do_pickle = True
+            do_set = value is not None and old != value
+            if do_set:
+                try:
+                    if isinstance(meta.get_field(key), RedisAtomicInteger):
+                        do_pickle = False
+                        do_set = old is None
+                    print old is None, 2222
+                except:
+                    pass
+            
+            if do_set:
+                if do_pickle:
+                    value = enpickle(value)
+                h_map[key] = value
 
             if key in indexes_for_model or self.connection.exact_all:
             	try:
             		indexes_for_field = indexes_for_model[key]
             	except KeyError:
-            		indexes_for_field = ()
+            		indexes_for_field = []
             	if 'exact' not in indexes_for_field and self.connection.exact_all:
             		indexes_for_field += 'exact',
-            	create_indexes(	key,
-            			value,
-            			old,
-            			indexes_for_field,
-            			pipeline,
-            			db_table+'_'+str(pk),
-            			db_table,
-            			pk,
-            			self.db_name,
-            			)
+            	create_indexes(key,
+        			value,
+        			old,
+        			indexes_for_field,
+        			pipeline,
+        			db_table+'_'+str(pk),
+        			db_table,
+        			pk,
+        			self.db_name,
+            	)
 
         pipeline.sadd(self.db_name+'_'+db_table+"_ids" ,pk)
         if len(h_map):
-            pipeline.hmset(get_hash_key(self.db_name,db_table,pk),h_map)			
+            pipeline.hmset(get_hash_key(self.db_name,db_table, pk), h_map)			
         pipeline.execute()
         if return_id:
             return unicode(pk)
