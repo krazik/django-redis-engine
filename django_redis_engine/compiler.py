@@ -381,7 +381,6 @@ class SQLCompiler(NonrelCompiler):
                     if isinstance(meta.get_field(key), RedisAtomicInteger):
                         do_pickle = False
                         do_set = old is None
-                    print old is None, 2222
                 except:
                     pass
             
