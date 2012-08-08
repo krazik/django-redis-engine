@@ -345,25 +345,24 @@ class SQLCompiler(NonrelCompiler):
         return self.connection.db_name
 
     def _save(self, data, return_id=False):
+        meta = self.query.get_meta()
+        db_table = meta.db_table
+        indexes = get_indexes()
+        indexes_for_model =  indexes.get(self.query.model,{})
 
-	meta = self.query.get_meta()
-	db_table = meta.db_table
-	indexes = get_indexes()
-	indexes_for_model =  indexes.get(self.query.model,{})
+        pipeline = self._collection.pipeline(transaction = False)
 
-	pipeline = self._collection.pipeline(transaction = False)
+        h_map = {}
+        h_map_old = {}
 
-	h_map = {}
-	h_map_old = {}
+        if '_id' in data:
+            pk = data['_id']
+            h_map_old = self._collection.hgetall(get_hash_key(self.db_name,db_table,pk))
+        else:
+            pk = self._collection.incr(self.db_name+'_'+db_table+"_id")
+            h_map_old = {}
 
-	if '_id' in data:
-		pk = data['_id']
-		h_map_old = self._collection.hgetall(get_hash_key(self.db_name,db_table,pk))
-	else:
-		pk = self._collection.incr(self.db_name+'_'+db_table+"_id")
-		h_map_old = {}
-	
-	for key,value in data.iteritems():
+            for key,value in data.iteritems():
                 if key == "_id":
                   continue
                 if key in h_map_old:
@@ -371,44 +370,48 @@ class SQLCompiler(NonrelCompiler):
                 else:
                     old = None
 
-                if old != value:
-                    new_value = None
-                    if value:
-                        try:
-                            if isinstance(meta.get_field(key), models.IntegerField):
-                                # don't pickle integers
-                                new_value = value
-                        except:
-                            pass
 
-                        if not new_value:
-                            # didn't get set, pickle it
-                            new_value = enpickle(value)
 
-                    h_map[key] = new_value
+                # if item is a RedisAtomicInteger we don't want to save it, since it's being atomically updated
+                # in other code.  but it hasn't been set before we do want to save it the first time. also we don't
+                # want to pickle these so that HINCRYBY can work
+                do_pickle = True
+                do_set = value and old != value
+                if do_set:
+                    try:
+                        if isinstance(meta.get_field(key), RedisAtomicInteger):
+                            do_pickle = False
+                            do_set = old is not None
+                    except:
+                        pass
 
-		if key in indexes_for_model or self.connection.exact_all:
-			try:
-				indexes_for_field = indexes_for_model[key]
-			except KeyError:
-				indexes_for_field = ()
-			if 'exact' not in indexes_for_field and self.connection.exact_all:
-				indexes_for_field += 'exact',
-			create_indexes(	key,
-					value,
-					old,
-					indexes_for_field,
-					pipeline,
-					db_table+'_'+str(pk),
-					db_table,
-					pk,
-					self.db_name,
-					)
-	
+                if do_set:
+                    if do_pickle:
+                        value = enpickle(value)
+                    h_map[key] = value
+
+            if key in indexes_for_model or self.connection.exact_all:
+            	try:
+            		indexes_for_field = indexes_for_model[key]
+            	except KeyError:
+            		indexes_for_field = ()
+            	if 'exact' not in indexes_for_field and self.connection.exact_all:
+            		indexes_for_field += 'exact',
+            	create_indexes(	key,
+            			value,
+            			old,
+            			indexes_for_field,
+            			pipeline,
+            			db_table+'_'+str(pk),
+            			db_table,
+            			pk,
+            			self.db_name,
+            			)
+
         pipeline.sadd(self.db_name+'_'+db_table+"_ids" ,pk)
         if len(h_map):
             pipeline.hmset(get_hash_key(self.db_name,db_table,pk),h_map)			
-	pipeline.execute()
+        pipeline.execute()
         if return_id:
             return unicode(pk)
 

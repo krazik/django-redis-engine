@@ -73,6 +73,7 @@ def unpickle(val):
         try:
             return pickle.loads(val)
         except:
+            # if we failed to unpickle, just return the raw value
             return val
 
 def enpickle(val):
