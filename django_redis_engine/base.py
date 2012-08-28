@@ -105,61 +105,50 @@ class DatabaseWrapper(NonrelDatabaseWrapper):
         return self._db_connection
 
     def _connect(self):
-	import traceback
-	import sys
-	#print '-------------------'
-	#traceback.print_stack()
-	#print '-------------------'
         if not self._connected:
-            host = self.settings_dict['HOST'] or None
-            port = self.settings_dict.get('PORT', None) or None
-            user = self.settings_dict.get('USER', None)
-            password = self.settings_dict.get('PASSWORD')
-            self.db_name = self.settings_dict['NAME']
             try:
               self.exact_all = settings.REDIS_EXACT_ALL
             except AttributeError:
               self.exact_all = True
-
             self.safe_inserts = self.settings_dict.get('SAFE_INSERTS', False)
-
             self.wait_for_slaves = self.settings_dict.get('WAIT_FOR_SLAVES', 0)
-            slave_okay = self.settings_dict.get('SLAVE_OKAY', False)
-
-            try:
-                if host is not None:
-                    assert isinstance(host, basestring), \
-                    'If set, HOST must be a string'
-
-                if port:
-                    try:
-                        port = int(port)
-                    except ValueError:
-                        raise ImproperlyConfigured(
-                        'If set, PORT must be an integer')
-
-                assert isinstance(self.safe_inserts, bool), \
-                'If set, SAFE_INSERTS must be True or False'
-                assert isinstance(self.wait_for_slaves, int), \
-                'If set, WAIT_FOR_SLAVES must be an integer'
-            except AssertionError, e:
-                raise ImproperlyConfigured(e)
-
-            self._connection = redis.Redis(host=host,
-                                                  port=port,
-                                          #        slave_okay=slave_okay
-						)
-
-            if user and password:
-                auth = self._connection[self.db_name].authenticate(user,
-                                                                   password)
-                if not auth:
-                    raise ImproperlyConfigured("Username and/or password for "
-                                               "the Redis db are not correct")
-
-            self._db_connection = self._connection#[self.db_name]
-
             
+            self.db_name = self.settings_dict.get('NAME', '')
+            servers = self.settings_dict.get('SERVERS', None)
+            if servers:
+                from redis_shard.shard import RedisShardAPI
+                self._connection = RedisShardAPI(servers)
+            else:
+                # don't use sharding
+                host = self.settings_dict.get('HOST', None)
+                port = self.settings_dict.get('PORT', None)
+                user = self.settings_dict.get('USER', None)
+                password = self.settings_dict.get('PASSWORD', None)
+
+                try:
+                    if host is not None:
+                        assert isinstance(host, basestring), 'If set, HOST must be a string'
+
+                    if port:
+                        try:
+                            port = int(port)
+                        except ValueError:
+                            raise ImproperlyConfigured('If set, PORT must be an integer')
+
+                    assert isinstance(self.safe_inserts, bool), 'If set, SAFE_INSERTS must be True or False'
+                    assert isinstance(self.wait_for_slaves, int), 'If set, WAIT_FOR_SLAVES must be an integer'
+                except AssertionError, e:
+                    raise ImproperlyConfigured(e)
+                
+                params = {'host': host, 'port': port}
+                if user:
+                    params['user'] = user
+                if password:
+                    params['password'] = password
+                self._connection = redis.Redis(**params)
+
+            self._db_connection = self._connection
             self._connected = True
 
-        # TODO: signal! (see Alex' backend)
+            # TODO: signal! (see Alex' backend)
+            
