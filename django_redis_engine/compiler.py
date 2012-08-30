@@ -106,13 +106,12 @@ class DBQuery(NonrelQuery):
     def collection(self):
         return self._collection
 
+    @safe_call
     def fetch(self, low_mark, high_mark):
-
         results = self._get_results()
-	#print 'here results ',results
         primarykey_column = self.query.get_meta().pk.column
         for e_id in results:
-            yield RedisEntity(e_id,self._collection,self.db_table,primarykey_column,self.query.get_meta(),self.db_name)
+            yield RedisEntity(e_id, self._collection, self.db_table, primarykey_column, self.query.get_meta(), self.db_name)
 
     @safe_call
     def count(self, limit=None): #TODO is this right?
@@ -211,51 +210,50 @@ class DBQuery(NonrelQuery):
         
 
     def _get_results(self):
-	"""
-	see self.db_query, lookup parameters format: {'column': {lookup:value}}
+        """
+        see self.db_query, lookup parameters format: {'column': {lookup:value}}
 	
-	"""
-	pk_column = self.query.get_meta().pk.column
-	db_table = self.query.get_meta().db_table	
+        """
+        pk_column = self.query.get_meta().pk.column
+        db_table = self.query.get_meta().db_table	
 	
-	results = self._collection.smembers(self.db_name+'_'+db_table+'_ids')
+        if len(self.db_query) > 1 or (not self.db_query.get(pk_column) and not self.db_query.get('id')):
+            results = self._collection.smembers(self.db_name+'_'+db_table+'_ids')
+        else:
+            results = None
 
+        for column, filteradd in self.db_query.iteritems():
+            lookup, value = filteradd.popitem() #TODO tuple better?
+            if pk_column == column:
+                if lookup == 'in': #TODO meglio??
+                    value_set = set(value)
+                    results = value_set if not results else results & value_set   #IN filter
+                elif lookup == 'exact':
+                    value_set = set([value,])
+                    results = value_set if not results else results & value_set
+            else:
+                if lookup == 'exact':
+                    value_set = self._collection.smembers(get_set_key(self.db_name, db_table, column, value))
+                    results = value_set if not results else results & value_set
+                elif lookup == 'in': #ListField or empty
+                    tempset = set()
+                    for v in value:
+                        tempset = tempset.union(self._collection.smembers(get_set_key(self.db_name,db_table,column,v)))
+                        results = tempset if not results else results & tempset
+                else:
+                    tempset = filter_with_index(lookup,value,self._collection,db_table,column,self.db_name)
+                    if tempset is not None:
+                        results = tempset if not results else results & tempset
+                    else:
+                        results = set()
 
-	for column,filteradd in self.db_query.iteritems():
-		lookup,value = filteradd.popitem()#TODO tuple better?
-
-		if pk_column == column:
-			if lookup == 'in': #TODO meglio??
-				results = results & set(value)   #IN filter
-			elif lookup == 'exact':
-				results = results & set([value,])
-				
-		else:
-			if lookup == 'exact':
-				results = results & self._collection.smembers(get_set_key(self.db_name,db_table,column,value))
-			elif lookup == 'in': #ListField or empty
-				tempset = set()
-				for v in value:
-					tempset = tempset.union(self._collection.smembers(get_set_key(self.db_name,db_table,column,v) ) )
-				results = results & tempset
-			else:
-				tempset = filter_with_index(lookup,value,self._collection,db_table,column,self.db_name)
-				if tempset is not None:
-					results = results & tempset
-				else:
-					results = set()
-								
-
-        if self._ordering:
-	    if self._ordering[0][1] == 'desc': 
-		results.reverse()
+        if self._ordering and self._ordering[0][1] == 'desc':
+            results.reverse()
 	
-	if self.query.low_mark > 0 and self.query.high_mark is not None:
-		results = list(results)[self.query.low_mark:self.query.high_mark]
+        if self.query.low_mark > 0 and self.query.high_mark is not None:
+            results = list(results)[self.query.low_mark:self.query.high_mark]
         elif self.query.low_mark > 0:
-
             results = list(results)[self.query.low_mark:]
-
         elif self.query.high_mark is not None:
             results = list(results)[:self.query.high_mark]
 
