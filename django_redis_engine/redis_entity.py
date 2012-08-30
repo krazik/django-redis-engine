@@ -4,7 +4,7 @@ import hashlib
 import pickle
 
 class RedisEntity(object):
-    def __init__(self,e_id,connection,db_table, pkcolumn, querymeta, db_name, data=None):
+    def __init__(self, e_id, connection, db_table, pkcolumn, querymeta, db_name, data=None):
         self.id = e_id
         self.connection = connection
         self.db_table = db_table
@@ -19,11 +19,9 @@ class RedisEntity(object):
     def get(self, what, value):
         if what == self.pkcolumn:
             return self.id
-        raw_value = ''
-        if what in self.data:
-            raw_value = self.data[what]
-        else:
-            raw_value = self.connection.hget(get_hash_key(self.db_name,self.db_table,self.id), what)
+        raw_value = self.data.get(what)
+        # saved below, in theory you chould start with no data and get fields 1 at a time, but not using this
+        # raw_value = self.connection.hget(get_hash_key(self.db_name,self.db_table,self.id), what)
             
         rv = None
         try:
