@@ -1,5 +1,5 @@
 from django.db import models
-from django.db.models.fields import FieldDoesNotExist
+from django.db.models.fields import FieldDoesNotExist, NOT_PROVIDED
 import hashlib
 import pickle
 
@@ -13,6 +13,16 @@ class RedisEntity(object):
         self.db_name = db_name
         if not data:
             self.data = self.connection.hgetall(get_hash_key(self.db_name, self.db_table, self.id))
+            # set defaults
+            for field, data in self.querymeta._name_map.iteritems():
+                if field not in self.data:
+                    value = None
+                    if field == pkcolumn:
+                        value = e_id
+                    elif data[0].default != NOT_PROVIDED:
+                        value = data[0].default
+                    if value is not None:
+                        self.data[field] = value
         else:
             self.data = data
 		
