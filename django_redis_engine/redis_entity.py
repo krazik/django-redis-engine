@@ -13,23 +13,13 @@ class RedisEntity(object):
         self.db_name = db_name
         if not data:
             self.data = self.connection.hgetall(get_hash_key(self.db_name, self.db_table, self.id))
-            # set defaults
-            for field, data in self.querymeta._name_map.iteritems():
-                if field not in self.data:
-                    value = None
-                    if field == pkcolumn:
-                        value = e_id
-                    elif data[0].default != NOT_PROVIDED:
-                        value = data[0].default
-                    if value is not None:
-                        self.data[field] = value
         else:
             self.data = data
 		
     def get(self, what, value):
         if what == self.pkcolumn:
             return self.id
-        raw_value = self.data.get(what)
+        raw_value = self.data.get(what, value)
         # saved below, in theory you chould start with no data and get fields 1 at a time, but not using this
         # raw_value = self.connection.hget(get_hash_key(self.db_name,self.db_table,self.id), what)
             
