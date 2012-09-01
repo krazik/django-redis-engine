@@ -24,10 +24,6 @@ import redis
 from djangotoolbox.db.basecompiler import NonrelQuery, NonrelCompiler, \
     NonrelInsertCompiler, NonrelUpdateCompiler, NonrelDeleteCompiler
 
-
-
-#TODO pipeline!!!!!!!!!!!!!!!!!!!!!
-
 def safe_regex(regex, *re_args, **re_kwargs):
     def wrapper(value):
         return re.compile(regex % re.escape(value), *re_args, **re_kwargs)
@@ -122,42 +118,29 @@ class DBQuery(NonrelQuery):
 
     @safe_call
     def delete(self):
-
-	db_table = self.query.get_meta().db_table
-	results = self._get_results()
+        db_table = self.query.get_meta().db_table
+        results = self._get_results()
 	
-	pipeline = self._collection.pipeline(transaction = False)
-	for res in results:
-		pipeline.hgetall(get_hash_key(self.db_name,db_table,res))
-	hmaps_ret = pipeline.execute()
-	hmaps = ((results[n],hmaps_ret[n]) for n in range(len(hmaps_ret)))
+        hmaps_ret = []
+        for res in results:
+            hmaps_ret.append(self._collection.hgetall(get_hash_key(self.db_name,db_table,res)))
+        hmaps = ((results[n],hmaps_ret[n]) for n in range(len(hmaps_ret)))
 
-	pipeline = self._collection.pipeline(transaction = False)
-	for res,hmap in hmaps:
-		pipeline.delete(get_hash_key(self.db_name,db_table,res))
-		for field,val in hmap.iteritems():
-			val = unpickle(val)
-			if val is not None:
-				#INDEXES
-				if field in self.indexes_for_model or self.connection.exact_all:
-					try:
-						indexes_for_field = self.indexes_for_model[field]
-					except KeyError:
-						indexes_for_field = ()
-					if 'exact' not in indexes_for_field and self.connection.exact_all:
-						indexes_for_field += 'exact',
-					delete_indexes(	field,
-							val,
-							indexes_for_field,
-							pipeline,
-							get_hash_key(self.db_name,db_table,res),
-							db_table,
-							res,
-							self.db_name,
-							)
-		pipeline.srem(self.db_name+'_'+db_table+'_ids' ,res)
-	pipeline.execute()
-
+        for res,hmap in hmaps:
+            self._collection.delete(get_hash_key(self.db_name,db_table,res))
+            for field,val in hmap.iteritems():
+                val = unpickle(val)
+                if val is not None:
+                    #INDEXES
+                    if field in self.indexes_for_model or self.connection.exact_all:
+                        try:
+                            indexes_for_field = self.indexes_for_model[field]
+                        except KeyError:
+                            indexes_for_field = ()
+                        if 'exact' not in indexes_for_field and self.connection.exact_all:
+                            indexes_for_field += 'exact',
+                        delete_indexes(field, val, indexes_for_field, self._collection, get_hash_key(self.db_name,db_table,res), db_table, res, self.db_name)
+            self._collection.srem(self.db_name+'_'+db_table+'_ids' ,res)
 
     @safe_call
     def order_by(self, ordering):
@@ -349,8 +332,6 @@ class SQLCompiler(NonrelCompiler):
         indexes = get_indexes()
         indexes_for_model =  indexes.get(self.query.model,{})
 
-        pipeline = self._collection.pipeline(transaction = False)
-
         h_map = {}
         h_map_old = {}
 
@@ -398,17 +379,16 @@ class SQLCompiler(NonrelCompiler):
         			value,
         			old,
         			indexes_for_field,
-        			pipeline,
+                    self._collection,
         			db_table+'_'+str(pk),
         			db_table,
         			pk,
         			self.db_name,
             	)
 
-        pipeline.sadd(self.db_name+'_'+db_table+"_ids" ,pk)
+        self._collection.sadd(self.db_name+'_'+db_table+"_ids" ,pk)
         if len(h_map):
-            pipeline.hmset(get_hash_key(self.db_name,db_table, pk), h_map)			
-        pipeline.execute()
+            self._collection.hmset(get_hash_key(self.db_name,db_table, pk), h_map)			
         if return_id:
             return unicode(pk)
 

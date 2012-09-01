@@ -106,26 +106,14 @@ def filter_with_index(lookup,value,conn,table,column,db_name):
 		#v2 = v[:-1]+chr(ord(v[-1])+1) #last letter=next(last letter)
 		key = get_zset_index_key(db_name,table,INDEX_KEY_INFIX,column,lookup)
 
-		pipeline = conn.pipeline()		
 		conn.zadd(key,v,0)
-		#pipeline.zadd(key,v2,0)
-		#pipeline.execute()
 		while True:
 			try:
 				conn.watch(key)
 				up = conn.zrank(key,v)
-				#down = conn.zrank(key,v2)
-
-				pipeline.zrange(key,up+1,-1)#down-1)
-				pipeline.zrem(key,v)
-				#pipeline.zrem(key,v2)
+				r = self._collection.zrange(key,up+1,-1)
+				self._collection.zrem(key,v)
 		
-				l = pipeline.execute()
-				#print l
-				r = l[0]
-				#print l
-				#print 'erre: ',r
-				#print 'second pipeline',pipeline.execute()
 				ret = set()
 				for i in r:
 					i = unicode(i.decode('utf8'))
@@ -138,25 +126,21 @@ def filter_with_index(lookup,value,conn,table,column,db_name):
 				return ret
 			except WatchError:
 				pass
-#		print pipeline.execute()
 
 	elif lookup in ('gt','gte','lt','lte'):
 		value = val_for_insert(value)
 		v = prepare_value_for_index(lookup,value)
 		key = get_zset_index_key(db_name,table,INDEX_KEY_INFIX,column,lookup)
-		pipeline = conn.pipeline()
 		conn.zadd(key,v,0)
 		while True:
 			try:
 				conn.watch(key)
 				up = conn.zrank(key,v)
 				if lookup in ('lt','lte'):
-					pipeline.zrange(key,0,up+1)
+					r = self._collection.zrange(key,0,up+1)
 				else:
-					pipeline.zrange(key,up+1,-1)
-				pipeline.zrem(key,v)
-				l = pipeline.execute()
-				r = l[0]
+					r = self._collection.zrange(key,up+1,-1)
+				self._collection.zrem(key,v)
 				ret = set()
 				for i in r:
 					i = unicode(i.decode('utf8'))
